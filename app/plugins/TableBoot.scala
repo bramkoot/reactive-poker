@@ -141,12 +141,12 @@ class PokerTableActor(implicit system: ActorSystem) extends Actor {
   }
 
   def nextTurnOrNextRound: Unit =
-    if (calledCurrentRound.length == players.length) {
+    if (calledCurrentRound.length == players.filterNot(_.folded).length) {
       nextRound
     }
     else {
       currentTurn = Some(nextPlayer)
-      currentTurnCancellable = Some(system.scheduler.scheduleOnce(10 seconds, self, TurnTimeout()))
+      currentTurnCancellable = Some(system.scheduler.scheduleOnce(15 seconds, self, TurnTimeout()))
 
       sendPlayerUpdates
     }
@@ -171,17 +171,18 @@ class PokerTableActor(implicit system: ActorSystem) extends Actor {
       sendPlayerUpdates
 
     case Bet(money) =>
-      currentTurnCancellable.map(_.cancel())
+      if (isCurrentTurnPlayer) {
+        currentTurnCancellable.map(_.cancel())
+        players = players.map {
+          case p if p.actor == sender =>
+            calledCurrentRound = p.id :: Nil
+            p.copy(bet = money, money = p.money - money)
+          case p => p
+        }
 
-      players = players.map {
-        case p if p.actor == sender =>
-          calledCurrentRound = p.id :: Nil
-          p.copy(bet = money, money = p.money - money)
-        case p => p
+        sendPlayerUpdates
+        nextTurnOrNextRound
       }
-
-      sendPlayerUpdates
-      nextTurnOrNextRound
 
     case Check() =>
       currentTurnCancellable.map(_.cancel())
@@ -222,7 +223,8 @@ class PokerTableActor(implicit system: ActorSystem) extends Actor {
         case Some(current) if currentTurn.contains(current.id) =>
           val bet = players.map(_.bet).max
           if (current.bet < bet) {
-            players = players.updated(players.indexOf(current), current.copy(bet = bet, money = current.money-bet+current.bet))
+            players = players.updated(players.indexOf(current),
+              current.copy(bet = 0, totalbet = current.bet, folded = true))
 
             calledCurrentRound = calledCurrentRound :+ current.id
             currentTurnCancellable.map(_.cancel())
@@ -235,14 +237,13 @@ class PokerTableActor(implicit system: ActorSystem) extends Actor {
 
     case TurnTimeout() =>
       players.map(_.actor ! Message(DateTime.now, "The current player timeout, the sucker"))
+      // either check or fold for current player
 
       currentTurnCancellable.map(_.cancel())
       currentTurn = Some(nextPlayer)
       currentTurnCancellable = Some(system.scheduler.scheduleOnce(10 seconds, self, TurnTimeout()))
 
-      players.map(_.actor ! NewPlayer(players.map { p =>
-        (p.name, p.bet, p.money, p.id == currentTurn.get)
-      }))
+      sendPlayerUpdates
 
     case StartGame() =>
       deck = new Deck

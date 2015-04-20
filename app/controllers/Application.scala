@@ -131,6 +131,10 @@ class PokerPlayerActor(client: ActorRef) extends Actor {
           }
         case "start" => table ! StartGame()
         case "call" => table ! CallIt()
+        case "check" =>
+          println("received check message")
+          table ! Check()
+        case "fold" => table ! Fold()
         case _ => // nothing
       }
 

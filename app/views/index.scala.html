@@ -26,11 +26,13 @@
     <div ng-show="joined" class="actionpanel panel panel-warning">
         <div class="panel-heading">{{ playerName }}</div>
         <div class="panel-body">
-            <button ng-click="start();" class="btn btn-default">Start</button>
+            <button ng-click="start();" class="btn btn-success">Start</button>
 
-            <button ng-click="call();" class="btn btn-primary">Check</button>
+            <button ng-click="check();" class="btn btn-primary">Check</button>
 
             <button ng-click="call();" class="btn btn-default">Call</button>
+
+            <button ng-click="check();" class="btn btn-danger">Fold</button>
 
             <div style="margin-top:6px;">
                 <input type="number" placeholder="Bet..." ng-model="betAmount" />
@@ -38,7 +40,7 @@
             </div>
 
 
-            <div style="margin-top:7px; height:100px;" ng-hide="hand.length == 0">
+            <div style="margin-top:12px; height:100px;" ng-hide="hand.length == 0">
                 <div ng-repeat="card in hand" ng-bind-html="card | cardFace" class="{{ card | cardClass }}"></div>
             </div>
         </div>
