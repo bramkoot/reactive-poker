@@ -1,20 +1,21 @@
 package models
 
 import controllers.ActorMessages._
-import models.PokerHands.{PokerHand, HighCard, FullHouse, StraightRoyalFlush}
+import models.PokerHands._
 import play.libs.F
 
 object PokerHands {
 
-  trait PokerHand[T] extends Ordered[PokerHand] {
+  trait PokerHand extends Ordered[PokerHand] {
     val ranking: Int
-
-    def compareToSame(that: T): Int
+    def cards: List[Card]
 
     final def compare(that: PokerHand) =
       if (ranking < that.ranking) -1
       else if (ranking > that.ranking) 1
-      else compareToSame(that.asInstanceOf[T])
+      else compareKickers(cards, that.cards)
+
+    require(cards.length==5, "A pokerhand should always contain exactly 5 cards")
   }
 
   def compareKickers (cards1: List[Card], cards2: List[Card]) = {
@@ -26,68 +27,40 @@ object PokerHands {
     }
   }
 
-  case class StraightRoyalFlush(cards: List[Card]) extends PokerHand[StraightRoyalFlush] {
+  case class StraightRoyalFlush(cards: List[Card]) extends PokerHand {
     val ranking = 10
-
-    def compareToSame(that: StraightRoyalFlush) = 0
   }
-  case class StraightFlush(cards: List[Card]) extends PokerHand[StraightFlush] {
+  case class StraightFlush(cards: List[Card]) extends PokerHand {
     val ranking = 9
-
-    def compareToSame(that: StraightFlush) = cards.head.rank compare that.cards.head.rank
   }
-  case class Flush(cards: List[Card]) extends PokerHand[Flush] {
+  case class Flush(cards: List[Card]) extends PokerHand {
     val ranking = 8
-
-    def compareToSame(that: Flush) = compareKickers(cards, that.cards)
   }
-  case class FullHouse(three: List[Card], two: List[Card]) extends PokerHand[FullHouse] {
+  case class FullHouse(three: List[Card], two: List[Card]) extends PokerHand {
     val ranking = 7
-
-    def compareToSame(that: FullHouse) =
-      if (three.head.rank == that.three.head.rank) two.head.rank compare that.two.head.rank
-      else three.head.rank compare that.three.head.rank
+    def cards = three ++ two
   }
-  case class FourOfAKind(cards: List[Card], kicker: Card) extends PokerHand[FourOfAKind] {
+  case class FourOfAKind(four: List[Card], kicker: Card) extends PokerHand {
     val ranking = 6
-
-    def compareToSame(that: FourOfAKind) =
-      if (cards.head.rank == that.cards.head.rank) kicker.rank compare that.kicker.rank
-      else cards.head.rank compare that.cards.head.rank
+    def cards = four :+ kicker
   }
-  case class Straight(cards: List[Card]) extends PokerHand[Straight] {
+  case class Straight(cards: List[Card]) extends PokerHand {
     val ranking = 5
-
-    def compareToSame(that: Straight) = cards.head.rank compare that.cards.head.rank
   }
-  case class ThreeOfAKind(cards: List[Card], kickers: List[Card]) extends PokerHand[ThreeOfAKind] {
+  case class ThreeOfAKind(three: List[Card], kickers: List[Card]) extends PokerHand {
     val ranking = 4
-
-    def compareToSame(that: ThreeOfAKind) =
-      if (cards.head.rank == that.cards.head.rank) compareKickers(kickers, that.kickers)
-      else cards.head.rank compare that.cards.head.rank
+    def cards = three ++ kickers
   }
-  case class TwoPair(first: List[Card], second: List[Card], kicker: Card) extends PokerHand[TwoPair] {
+  case class TwoPair(first: List[Card], second: List[Card], kicker: Card) extends PokerHand {
     val ranking = 3
-
-    def compareToSame(that: TwoPair) =
-      if (first.head.rank == that.first.head.rank) {
-        if (second.head.rank == that.second.head.rank) kicker.rank compare that.kicker.rank
-        else second.head.rank compare that.second.head.rank
-      } else first.head.rank compare that.first.head.rank
-
+    def cards = first ++ second :+ kicker
   }
-  case class Pair(pair: List[Card], kickers: List[Card]) extends PokerHand[Pair] {
+  case class Pair(pair: List[Card], kickers: List[Card]) extends PokerHand {
     val ranking = 2
-
-    def compareToSame(that: Pair) =
-      if (pair.head.rank == that.pair.head.rank) compareKickers(kickers, that.kickers)
-      else pair.head.rank compare that.pair.head.rank
+    def cards = pair ++ kickers
   }
-  case class HighCard(kickers: List[Card]) extends PokerHand[HighCard] {
+  case class HighCard(cards: List[Card]) extends PokerHand {
     val ranking = 1
-
-    def compareToSame(that: HighCard) = compareKickers(kickers, that.kickers)
   }
 }
 
@@ -97,7 +70,7 @@ object HandExtractors {
 
   def extract(cards: List[Card]) = cards match {
     case Straight(Royal(Flush(flush)))      => P.StraightRoyalFlush(flush)
-    case Straight(Flush(flush))             => P.StraightFlush(flush) // @TODO cards are in wrong order if wheel straight
+    case StraightFlush(flush)               => P.StraightFlush(flush)
     case FourOfAKind(four, kickers)         => P.FourOfAKind(four, kickers.sortBy(_.rank).reverse.head)
     case ThreeOfAKind(three, Pair(two, _))  => P.FullHouse(three, two)
     case Flush(flush)                       => P.Flush(flush)
@@ -108,7 +81,6 @@ object HandExtractors {
     case c                                  => P.HighCard(c.sortBy(_.rank).reverse.take(5))
   }
 
-  // returns 5 cards
   object Royal {
     def unapply(cards: List[Card]) = {
       cards.map(_.rank).sorted.reverse match {
@@ -118,10 +90,30 @@ object HandExtractors {
     }
   }
 
+  object StraightFlush {
+    def unapply(cards: List[Card]) = cards.groupBy(_.suit).find(_._2.length > 4).flatMap {
+      case (_, list) if list.length >= 5 =>
+        val sorted = list.sortBy(_.rank).reverse
+        val straight = sorted.tail.foldLeft(List(sorted.head)) {
+          case (r, c) if r.length == 5 || r.head.rank == c.rank => r // straight is complete or skip double
+          case (r, c) if c.rank.id-1 == r.head.rank.id => c :: r
+          case (r, c) => c :: Nil // next card is not next in straight
+        }
+
+        if (straight.length >= 5) {
+          Some(straight.take(5))
+        }
+        else if (straight.length == 4 && sorted.head.rank == Rank.Ace && straight.last.rank == Rank.Two) {
+          Some(straight :+ sorted.head)
+        } else None
+      case _ => None
+    }
+  }
+
   // returns 5 cards
   object Flush {
     def unapply(cards: List[Card]) = cards.groupBy(_.suit).find(_._2.length > 4).map {
-      case (suit, list) => list.sortBy(_.rank).reverse.take(5)
+      case (_, list) => list.sortBy(_.rank).reverse.take(5)
     }
   }
 
@@ -144,7 +136,6 @@ object HandExtractors {
     }
   }
 
-  // returns (cards, kickers)
   object FourOfAKind {
     def unapply(cards: List[Card]) =
       cards.groupBy(_.rank).find(_._2.length == 4).map {
@@ -152,7 +143,6 @@ object HandExtractors {
       }
   }
 
-  // returns (cards, kickers)
   object ThreeOfAKind {
     def unapply(cards: List[Card]) =
       cards.groupBy(_.rank).filter(_._2.length == 3).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map { list =>
@@ -160,7 +150,6 @@ object HandExtractors {
       }
   }
 
-  // returns (paircards, kickers)
   object Pair {
     def unapply(cards: List[Card]) =
       cards.groupBy(_.rank).filter(_._2.length == 2).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map { list =>
