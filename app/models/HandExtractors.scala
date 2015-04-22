@@ -18,11 +18,9 @@ object PokerHands {
     require(cards.length==5, "A pokerhand should always contain exactly 5 cards")
   }
 
-  def compareKickers (cards1: List[Card], cards2: List[Card]) = {
-    (cards1 zip cards2).filterNot {
-      case (l, r) => l.rank == r.rank
-    }.headOption match {
-      case Some((l, r)) => if (l.rank > r.rank) 1 else -1
+  def compareKickers (left: List[Card], right: List[Card]) = {
+    (left zip right).filterNot(p => p._1.rank == p._2.rank).headOption match {
+      case Some((l, r)) => l compare r
       case None => 0
     }
   }
@@ -71,14 +69,14 @@ object HandExtractors {
   def extract(cards: List[Card]) = cards match {
     case Straight(Royal(Flush(flush)))      => P.StraightRoyalFlush(flush)
     case StraightFlush(flush)               => P.StraightFlush(flush)
-    case FourOfAKind(four, kickers)         => P.FourOfAKind(four, kickers.sortBy(_.rank).reverse.head)
+    case FourOfAKind(four, kickers)         => P.FourOfAKind(four, kickers.head)
     case ThreeOfAKind(three, Pair(two, _))  => P.FullHouse(three, two)
     case Flush(flush)                       => P.Flush(flush)
     case Straight(straight)                 => P.Straight(straight)
-    case ThreeOfAKind(three, kickers)       => P.ThreeOfAKind(three, kickers.sortBy(_.rank).reverse.take(2))
-    case Pair(first, Pair(second, kickers)) => P.TwoPair(first, second, kickers.sortBy(_.rank).reverse.head)
-    case Pair(pair, kickers)                => P.Pair(pair, kickers.sortBy(_.rank).reverse.take(3))
-    case c                                  => P.HighCard(c.sortBy(_.rank).reverse.take(5))
+    case ThreeOfAKind(three, kickers)       => P.ThreeOfAKind(three, kickers.take(2))
+    case Pair(first, Pair(second, kickers)) => P.TwoPair(first, second, kickers.head)
+    case Pair(pair, kickers)                => P.Pair(pair, kickers.take(3))
+    case c                                  => P.HighCard(c.sorted.take(5))
   }
 
   object Royal {
@@ -92,32 +90,17 @@ object HandExtractors {
 
   object StraightFlush {
     def unapply(cards: List[Card]) = cards.groupBy(_.suit).find(_._2.length > 4).flatMap {
-      case (_, list) if list.length >= 5 =>
-        val sorted = list.sortBy(_.rank).reverse
-        val straight = sorted.tail.foldLeft(List(sorted.head)) {
-          case (r, c) if r.length == 5 || r.head.rank == c.rank => r // straight is complete or skip double
-          case (r, c) if c.rank.id-1 == r.head.rank.id => c :: r
-          case (r, c) => c :: Nil // next card is not next in straight
-        }
-
-        if (straight.length >= 5) {
-          Some(straight.take(5))
-        }
-        else if (straight.length == 4 && sorted.head.rank == Rank.Ace && straight.last.rank == Rank.Two) {
-          Some(straight :+ sorted.head)
-        } else None
+      case (_, list) if list.length >= 5 => Straight.unapply(list)
       case _ => None
     }
   }
 
-  // returns 5 cards
   object Flush {
     def unapply(cards: List[Card]) = cards.groupBy(_.suit).find(_._2.length > 4).map {
-      case (_, list) => list.sortBy(_.rank).reverse.take(5)
+      case (_, list) => list.sorted.take(5)
     }
   }
 
-  // returns 5 cards
   object Straight {
     def unapply(cards: List[Card]) = {
       val sorted = cards.sortBy(_.rank).reverse
@@ -136,24 +119,15 @@ object HandExtractors {
     }
   }
 
-  object FourOfAKind {
-    def unapply(cards: List[Card]) =
-      cards.groupBy(_.rank).find(_._2.length == 4).map {
-        case (_, list) => (list, cards diff list)
-      }
-  }
+  object FourOfAKind extends GroupOf { val n = 4 }
+  object ThreeOfAKind extends GroupOf { val n = 3 }
+  object Pair extends GroupOf { val n = 2 }
 
-  object ThreeOfAKind {
+  trait GroupOf {
+    val n: Int
     def unapply(cards: List[Card]) =
-      cards.groupBy(_.rank).filter(_._2.length == 3).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map { list =>
-        (list, cards diff list)
-      }
-  }
-
-  object Pair {
-    def unapply(cards: List[Card]) =
-      cards.groupBy(_.rank).filter(_._2.length == 2).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map { list =>
-        (list, cards diff list)
+      cards.groupBy(_.rank).filter(_._2.length == n).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map {
+        list => (list, (cards diff list).sorted)
       }
   }
 

@@ -25,13 +25,15 @@ object Application extends Controller {
 }
 
 object ActorMessages {
-  case class Card (id: Int) {
+  case class Card (id: Int) extends Ordered[Card] {
     require(id >= 0 && id <= 51, "Cardnumber must be between 0 and 51")
 
     def suit = Suit(floor(id/13).toInt)
     def rank = Rank(id%13)
 
     override def toString = s"Card($rank, $suit)"
+
+    def compare(that: Card) = -(rank compare that.rank)
   }
 
   object Rank extends Enumeration {
