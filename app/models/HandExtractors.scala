@@ -103,12 +103,12 @@ object HandExtractors {
 
   object Straight {
     def unapply(cards: List[Card]) = {
-      val sorted = cards.sortBy(_.rank).reverse
+      val sorted = cards.sorted
       val straight = sorted.tail.foldLeft(List(sorted.head)) {
         case (r, c) if r.length == 5 || r.head.rank == c.rank => r // straight is complete or skip double
-        case (r, c) if c.rank.id-1 == r.head.rank.id => c :: r
+        case (r, c) if c.rank.id == r.head.rank.id-1 => c :: r
         case (r, c) => c :: Nil // next card is not next in straight
-      }
+      }.reverse
 
       if (straight.length >= 5) {
         Some(straight.take(5))
