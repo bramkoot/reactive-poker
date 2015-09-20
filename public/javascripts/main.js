@@ -15,7 +15,7 @@ PokerApp.controller("MainController", function ($scope, $websocket) {
     $scope.join = function () {
         console.log("joining with name = " + $scope.playerName);
 
-        ws.$emit("join", {position: 1, name: $scope.playerName});
+        ws.$emit("join", {position: $scope.playerPosition, name: $scope.playerName});
 
         $scope.joined = true;
         $scope.$apply();
