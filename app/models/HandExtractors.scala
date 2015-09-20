@@ -1,9 +1,5 @@
 package models
 
-import controllers.ActorMessages._
-import models.PokerHands._
-import play.libs.F
-
 object PokerHands {
 
   trait PokerHand extends Ordered[PokerHand] {
@@ -126,7 +122,7 @@ object HandExtractors {
   trait GroupOf {
     val n: Int
     def unapply(cards: List[Card]) =
-      cards.groupBy(_.rank).filter(_._2.length == n).map(_._2).toList.sortBy(_.head.rank).reverse.headOption.map {
+      cards.groupBy(_.rank).filter(_._2.length == n).values.toList.sortBy(_.head.rank).lastOption.map {
         list => (list, (cards diff list).sorted)
       }
   }

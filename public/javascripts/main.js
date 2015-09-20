@@ -15,7 +15,7 @@ PokerApp.controller("MainController", function ($scope, $websocket) {
     $scope.join = function () {
         console.log("joining with name = " + $scope.playerName);
 
-        ws.$emit("join", {name: $scope.playerName});
+        ws.$emit("join", {position: 1, name: $scope.playerName});
 
         $scope.joined = true;
         $scope.$apply();
@@ -24,7 +24,7 @@ PokerApp.controller("MainController", function ($scope, $websocket) {
     $scope.start = function () {
         console.log("starting game... ");
 
-        ws.$emit("start")
+        ws.$emit("startGame")
     };
 
     $scope.call = function () {
@@ -46,8 +46,6 @@ PokerApp.controller("MainController", function ($scope, $websocket) {
 
     ws.$on('$open', function () {
         console.log('WebSocket connection open!');
-
-        ws.$emit('ping', 'hi listening websocket server');
     });
 
     ws.$on('newplayer', function (data) {
@@ -70,7 +68,12 @@ PokerApp.controller("MainController", function ($scope, $websocket) {
         $scope.$apply();
     });
 
-    ws.$on('message', function (data) {
+    ws.$on('chatMessage', function (data) {
+        $scope.messages.unshift(data);
+        $scope.$apply();
+    });
+
+    ws.$on('gameMessage', function (data) {
         $scope.messages.unshift(data);
         $scope.$apply();
     });
